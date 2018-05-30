@@ -1,7 +1,7 @@
 (ns hsm.views
   (:require
     [clojure.string     :as s]
-    [clojure.tools.logging :as log]
+    [taoensso.timbre :as log]
     [hiccup.core        :refer [html ]]
     [hiccup.page        :refer [doctype include-css include-js html5]]
     [hiccup.def         :refer [defhtml ]]
@@ -24,11 +24,11 @@
 
 (defhtml panelx
   ([header footer body-css & content ]
-    (let [panel-body-css (s/join " " 
+    (let [panel-body-css (s/join " "
                             (conj (set body-css) "panel-body"))]
-      [:div.panel.panel-default 
+      [:div.panel.panel-default
         [:div.panel-heading header]
-        [:div {:class panel-body-css} 
+        [:div {:class panel-body-css}
           content]
         [:div.panel-footer footer]])))
 
@@ -45,25 +45,18 @@
 
 (defhtml left-menu
   [host platform page]
-  (log/info "LEFT-MENU" host)
-  [:div.bs-callout.bs-callout-success ;{:style "background-color:#f7f7f7;" }
-  
-    [:a.btn.btn-success {:href "#mc_embed_signup" :data-toggle :modal} "Subscribe Free"]
-    [:p {:style "margin-top:10px"} "Join " [:b 1100] " others. No spamming." [:br][:b "I promise!"]]
-    [:p "We are currently under high development. "[:a {:href "https://github.com/bcambel/hackersome?utm_source=left_menu_link"} "Follow us at github."]]
+  [:div.bs-callout.bs-callout-success
+    ; [:a.btn.btn-success {:href "#mc_embed_signup" :data-toggle :modal} "Subscribe Free"]
+    [:p {:style "margin-top:10px"} "Join " [:b 10350] "+ others. No spamming." [:br][:b "I promise!"]]
+    [:p
+      [:a {:href "https://github.com/bcambel/hackersome?ref=left_menu_link"} "Follow us at github."]]
+      [:iframe {:src "http://ghbtns.com/github-btn.html?user=bcambel&repo=oss.io&type=watch&count=true&size=normal"
+                :allowtransparency true :frameborder 0 :scroling 0 :width "260px" :height "30px"}]
     [:hr]
-    [:p "Looking for " [:b[:span.red "Python Tutorials? "]] [:br] [:a {:href "/tutorial/?utm_source=left_menu_link"}  "Check these awesome tutorials"]]
-    [:hr]
-    [:a.twitter-share-button {:href "https://twitter.com/share" 
-      :data-text (format "Top %s Projects" platform)
-      :data-via "pythonhackers" :data-url (format "%s/%s" host page) :data-size :normal
-      :data-hashtags "python,hackers,github"
-      } "Tell your friends"]
     [:a.twitter-follow-button {:href "https://twitter.com/pythonhackers" :data-show-count true :data-size :small }]
-    [:div.fb-like {:data-href (format "http://%s/top-%s-projects" host platform)}]
 
     [:hr]
-    [:script#_carbonads_js {:type "text/javascript" :src (format "//cdn.carbonads.com/carbon.js?zoneid=1673&serve=C6AILKT&placement=%s" (get-placement host)) }]
+    [:script#_carbonads_js {:type "text/javascript" :src (format "//cdn.carbonads.com/carbon.js?zoneid=1673&serve=C6AILKT&placement=ossio") }]
     ])
 
 (defhtml languages-pane
@@ -73,18 +66,17 @@
     [:tr [:td
     [:a {:href (format "/%s/top-projects" lang)} lang]]])])
 
-(def property-ids 
+(def property-ids
   { "hackersome.com" "UA-57973731-1"
-    "sweet.io" "UA-33058338-1"
     "pythonhackers.com" "UA-57973731-4"
     "clojurehackers.com" "UA-57973731-3"
     "dev.hackersome.com" "UA-57973731-1"
     "oss.io" "UA-57973731-5"
+    "www.oss.io" "UA-57973731-10"
     "java-hackers.com" "UA-57973731-6"
-    "answer.io" "UA-57973731-7"
      })
 
-(def disqus-ids 
+(def disqus-ids
 {
   "pythonhackers.com" "pythonhackers"
   "clojurehackers.com" "pythonhackers"
@@ -111,7 +103,7 @@
     {:lang "en-US"}
     [:head
       [:meta {:charset "UTF-8"}]
-      (include-css "//maxcdn.bootstrapcdn.com/bootswatch/3.3.1/lumen/bootstrap.min.css")
+      (include-css "//maxcdn.bootstrapcdn.com/bootswatch/3.3.7/solar/bootstrap.min.css")
       (include-css "//maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css")]
     [:body
       content
@@ -129,37 +121,35 @@
         [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"}]
         [:meta {:content "IE=edge,chrome=1"
                 :http-equiv "X-UA-Compatible"}]
-        [:title (or title (format "Top %s Projects - Hackersome" platform))]
+        [:title (or title (format "Top %s Projects - Open Source Software" platform))]
         [:meta {:name "description" :content description}]
         [:meta {:name "keywords" :content (or keywords description)}]
-        (include-css "//maxcdn.bootstrapcdn.com/bootswatch/3.3.1/lumen/bootstrap.min.css")
+        (include-css "//maxcdn.bootstrapcdn.com/bootswatch/3.3.7/paper/bootstrap.min.css")
         (include-css "//maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css")
-        (include-css "/css/style.css")]
+        (include-css "/css/style.css")
+        ]
        [:body
          [:div.nav.navbar-default
           [:div.container
              [:div.navbar-header
                 [:span.rotated.orange (format "%s" (str "(" platform ")"))]
-                [:a.navbar-brand {:href (format "http://%s" website)}  "Hackersome" ]]
+                [:a.navbar-brand {:href (format "http://%s" website)}  "OpenSourceSofware" ]]
                 [:div.navbar-collapse.collapse
                  [:ul.nav.navbar-nav
-                  [:li [:a {:href "/users?utm_source=top_menu_link"} "Users"]]
-                  [:li [:a {:href "/open-source/?utm_source=top_menu_link"} "Top Projects"]]
-                  ; [:li [:a {:href "/collections"} "Collections"]]
-                  [:li [:a {:href "/discussions"} "Discussions"]]
-
+                  [:li [:a {:href "/users?ref=top_menu_link"} "Users"]]
+                  [:li [:a {:href "/open-source/?ref=top_menu_link"} "Top Projects"]]
                    [:li.dropdown
-                     [:a.dropdown-toggle {:data-toggle "dropdown" :href "#"} "Platforms" [:span.caret]]
+                     [:a.dropdown-toggle {:data-toggle "dropdown" :href "#"} "Languages" [:span.caret]]
                      [:ul.dropdown-menu
                        (for [lang languages]
-                         [:li [:a {:href (format "/%s/index" lang) } lang]])]]
+                         [:li [:a {:href (format "/%s/top-projects" lang) } lang]])]]
                   [:li [:a {:href "/about"} "About"]]
+                  [:li [:a {:href "/register"} "Join"]]
                   ]
-                  ; [:form.navbar-form.navbar-left {:method "GET" :action "/p/"}
-                  ;   [:div.form-group 
-                  ;     [:input.form-control.typeahead.input-xs {:type "text" :name "project"}]]
-                  ;     [:button.btn.btn-default.btn-xs {:type "Submit" :onclick "window.location='/p/'+ $(this).parents('form').find('input').val();return false;"} "Go"]]
-                  [:ul.nav.navbar-nav.navbar-right [:li [:a "Hello"] ]]]]]
+
+                  [:ul.nav.navbar-nav.navbar-right [:li
+                  ; [:div#oa_social_login_container ]
+                  ]]]]]
         [:div.container-fluid
           ; [:div.col-lg-1.left-panel ""]
           [:div.col-lg-11
@@ -173,21 +163,21 @@
           [:div.col-lg-10.col-lg-offset-1
             [:p "Designed, built and made in Amsterdam with all the love by " [:a {:href "http://twitter.com/bahadircambel"} "@bcambel"]]
             [:p
-              website " running version  " [:a {:href (str "https://github.com/bcambel/hackersome/commit/" VERSION)} (str "@" SHORTVERSION)]]
-            [:p "Code licensed under " [:a {:href "https://github.com/bcambel/hackersome/blob/development/LICENSE"} :MIT]]
+              website " running version  " [:a {:href (str "https://github.com/bcambel/oss.io/commit/" VERSION)} (str "@" SHORTVERSION)]]
+            [:p "Code licensed under " [:a {:href "https://github.com/bcambel/oss.io/blob/development/LICENSE"} :MIT]]
             [:hr]
             (when-not is-dev?
               [:div
                 [:p
-                  [:a.twitter-share-button {:href "https://twitter.com/share" 
+                  [:a.twitter-share-button {:href "https://twitter.com/share"
                     :data-text "Top Projects on"
                     :data-via "pythonhackers" :data-size :normal
                     } "Tell your friends"]
                   [:a.twitter-follow-button {:href "https://twitter.com/pythonhackers" :data-show-count true :data-size :normal }]]
                 [:hr]
-                [:iframe {:src "http://ghbtns.com/github-btn.html?user=bcambel&repo=pythonhackers&type=watch&count=true&size=normal" 
+                [:iframe {:src "http://ghbtns.com/github-btn.html?user=bcambel&repo=pythonhackers&type=watch&count=true&size=normal"
                           :allowtransparency true :frameborder 0 :scroling 0 :width "120px" :height "30px"}]
-                [:iframe {:src "http://ghbtns.com/github-btn.html?user=bcambel&repo=hackersome&type=watch&count=true&size=normal" 
+                [:iframe {:src "http://ghbtns.com/github-btn.html?user=bcambel&repo=oss.io&type=watch&count=true&size=normal"
                           :allowtransparency true :frameborder 0 :scroling 0 :width "260px" :height "30px"}]
             ])]
          ]
@@ -213,21 +203,27 @@
                     "//cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.10.4/typeahead.bundle.min.js"
                     "//cdnjs.cloudflare.com/ajax/libs/handlebars.js/2.0.0/handlebars.min.js"
                     "//cdnjs.cloudflare.com/ajax/libs/bootstrap-markdown/2.8.0/js/bootstrap-markdown.js")
-        (include-js "/js/app.js")
 
         (when (if (nil? is-dev?) true is-dev?)
           [:script {:type "text/javascript"}
-          (str 
+          (str
           (format "(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
       (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
       m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
       })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
       ga('create', '%s', 'auto');
       ga('send', 'pageview');" property-id)
-
+      (format
+      "var oneall_subdomain = 'ossio';var oa = document.createElement('script');oa.type = 'text/javascript'; oa.async = true;oa.src = '//' + oneall_subdomain + '.api.oneall.com/socialize/library.js';
+      var s = document.getElementsByTagName('script')[0];s.parentNode.insertBefore(oa, s);
+      var _oneall = _oneall || [];
+      _oneall.push(['social_login', 'set_providers', ['github','google','twitter']]);
+      _oneall.push(['social_login', 'set_callback_uri', 'http://%s/auth']);
+      _oneall.push(['social_login', 'do_render_ui', 'oa_social_login_container']);" website)
           "!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?'http':'https';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+'://platform.twitter.com/widgets.js';fjs.parentNode.insertBefore(js,fjs);}}(document, 'script', 'twitter-wjs');"
+
           (when-not is-dev?
-          (format 
+          (format
           "(function() {
             var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
             dsq.src = '//%s.disqus.com/embed.js';
@@ -238,19 +234,6 @@
   analytics.load('eqMNHeqB0Ukx8AWah4nKiwFwaxbeJlGg');
   analytics.page();}}();
 ")
-(when-not is-dev?
-  "var _gauges = _gauges || [];
-  (function() {
-    var t   = document.createElement('script');
-    t.type  = 'text/javascript';
-    t.async = true;
-    t.id    = 'gauges-tracker';
-    t.setAttribute('data-site-id', '552832af5dd05343e80002b3');
-    t.setAttribute('data-track-path', 'https://track.gaug.es/track.gif');
-    t.src = 'https://track.gaug.es/track.js';
-    var s = document.getElementsByTagName('script')[0];
-    s.parentNode.insertBefore(t, s);
-  })();")
 (format
 "!function(){window.jstag=function(e){var t=!1,n=window,r=document,i='/js/io',s=Array.prototype.slice,o=e.url||'';return n.jstag||{load:function(){var e,s=r.getElementsByTagName('script')[0];return t=!0,'JSON'in n&&Array.prototype.forEach||(i+='w'),r.getElementById(i)?this:(e=r.createElement('script'),e.id=i,e.src=o+i+'.min.js',s.parentNode.insertBefore(e,s),this)},_q:[],_c:e,bind:function(e){this._q.push([e,s.call(arguments,1)])},ready:function(){this._q.push(['ready',s.call(arguments)])},send:function(){return t||this.load(),this._q.push(['ready','send',s.call(arguments)]),this},ts:(new Date).getTime()}
 }({cid:'report',url:'//%s/',path:'',idpath:''});jstag.send({data:1});}();" (if is-dev? "dev.strck.hackersome.com" "strck.hackersome.com"))

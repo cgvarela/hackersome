@@ -2,39 +2,31 @@
      (:require
         [clojure.java.io              :as io]
         [cheshire.core                :refer :all]
-        [clojurewerkz.cassaforte.cql  :as cql]
-        [clojure.tools.logging        :as log]
+        [taoensso.timbre              :as log]
         [hsm.dev                      :refer :all]
         [hsm.controllers.user         :as c.u]
-        [hsm.controllers.post         :as c.p]
         [hsm.controllers.project      :as c.pr]
-        [hsm.controllers.coll         :as c.coll]
-        [hsm.controllers.discussion   :as c.d]
         [hsm.controllers.main         :as c.m]
+        [hsm.controllers.task         :as c.t]
+        [hsm.controllers.account         :as account]
         [hsm.integration.ghub         :as ghub]
-        [hsm.ring :as ringing         :refer [json-resp wrap-exception-handler wrap-nocache wrap-log redirect]]
-        [hsm.system.kafka             :as sys.kafka]
-        [hsm.system.cassandra         :as sys.cassandra]
+        [hsm.ring :as ringing         :refer [json-resp wrap-exception-handler
+                                              wrap-nocache wrap-log redirect]]
+        [raven-clj.ring               :refer [capture-error wrap-sentry]]
         [hsm.system.redis             :as sys.redis]
-        [hsm.system.else              :as sys.else]
+        [hsm.system.pg              :as sys.pg]
         [compojure.handler            :as handler :refer [api]]
         [compojure.route              :as route :refer [resources]]
         [ring.middleware.reload       :as reload]
+        [ring.middleware.defaults     :refer :all]
+        [ring.middleware.keyword-params :refer :all]
         [ring.util.response           :as resp]
-        [ring.adapter.jetty           :refer [run-jetty]]
-        [raven-clj.ring               :refer [wrap-sentry]]
-        [raven-clj.core               :refer  [capture]]
         [net.cgrand.enlive-html       :refer [deftemplate]]
         [compojure.core               :refer [GET POST PUT defroutes]]
-        [com.stuartsierra.component   :as component]))
+        [taoensso.carmine.ring        :refer [carmine-store]]
+        [com.stuartsierra.component   :as component])
+    (:use org.httpkit.server))
 
-(deftemplate defaultpage
-  (io/resource "index.html") [] [:body] (if is-dev? inject-devmode-html identity))
-
-(defn sample-conn
-  [db request]
-  (let [conn (:connection db)]
-    (json-resp (cql/select conn :user))))
 
 
 (defrecord HTTP [port db kafka-producer redis else conf server]
@@ -50,28 +42,14 @@
                  :event-chan event-chan
                  :redis redis
                  :conf conf
-                 :else else}]
+                ;  :else else
+                 }]
       (defroutes routes
         (resources "/")
-        (resources "/react" {:root "react"})
-        ; (GET  "/" req (defaultpage))
+
         (GET  "/"                                 request (c.m/homepage specs request))
         (GET  "/about"                            request (c.m/about specs request))
-        (GET  "/test"                             request (sample-conn db request))
-        ; (POST "/user/create"                    request (c.u/create-user [db event-chan] request))
-        (POST "/post/create"                      request (c.p/create-post [db event-chan] request))
-        (GET  "/topic/:id"                        request (c.d/get-topic specs request))
-        (GET  "/discussions"                      request (c.d/load-discussions specs request))
-        (GET  "/discussion/new"                   request (c.d/new-discussion specs request))
-        (POST "/discussion/create"                request (c.d/create-discussion specs request))
-        (GET  "/discussion/:id"                   request (c.d/get-discussion specs request))
-        (GET  "/discussion/:id/posts"             request (c.d/get-discussion-posts specs request))
-        (POST "/discussion/:id/post/create"       request (c.d/post-discussion specs request))
-        (POST "/discussion/:id/post/:pid/delete"  request (c.d/rm-post-discussion specs request))
-        (GET  "/discussion/:id/post/:pid/edit"    request (c.d/edit-post-discussion specs request))
-        (POST "/discussion/:id/post/:pid/edit"    request (c.d/update-post-discussion specs request))
-        (POST "/discussion/:id/follow"            request (c.d/follow-discussion specs request))
-        (POST "/discussion/:id/unfollow"          request (c.d/unfollow-discussion specs request))
+
 
         (GET  "/users"                            request (c.u/some-user specs request))
         (GET  "/user2/:id"                        request (c.u/get-user2 specs request))
@@ -81,64 +59,42 @@
         (GET  "/user2/:id/starred"                request (c.u/user2-starred specs request))
         (GET  "/user2/:id/contrib"                request (c.u/user2-contrib specs request))
         (GET  "/user2/:id/activity"               request (c.u/user2-activity specs request))
-        
-        (GET  "/user/:id"                         request (c.u/get-user [db event-chan] request))
-        (GET  "/user/:id/activity"                request (c.u/get-user-activity [db event-chan] request))
-        (POST "/user/:id/follow"                  request (c.u/follow-user [db event-chan] request))
-        (POST "/user/:id/unfollow"                request (c.u/unfollow-user [db event-chan] request))
-        (GET  "/user/:id/followers"               request (c.u/get-user-followers [db event-chan] request))
-        (GET  "/user/:id/following"               request (c.u/get-user-following [db event-chan] request))
-        
-        (POST "/link/create"                      request (c.p/create-link [db event-chan] request))
-        (POST "/link/:id/upvote"                  request (c.p/upvote-link [db event-chan] request))
-        (GET  "/link/:id"                         request (c.p/show-link [db event-chan] request))
-        (GET  "/links/:date"                      request (c.p/list-links [db event-chan] request))
-        
+        (GET  "/user2/:id/events"                 request (c.u/organization-events specs request))
+
         (GET  "/os/:user/:project"                request (c.pr/get-proj specs request))
         (GET  "/open-source/:user/:project"       request (c.pr/get-proj specs request))
         (GET  "/open-source"                      request (redirect "/open-source/"))
         (GET  "/open-source/"                     request (c.pr/list-top-proj specs request))
-        
+
         (GET  "/p/:user/:project"                 request (c.pr/get-proj specs request))
         (GET  "/p/:user/:project/:mod"            request (c.pr/get-proj-module specs request))
-        
+
         (GET  "/python-packages/"                 request (c.pr/get-py-proj specs request))
         (GET  "/python-packages/:project"         request (c.pr/get-py-proj specs request))
         (GET  "/python-packages/:project/"        request (c.pr/get-py-proj specs request))
-        (GET  "/top-python-contributors-developers" 
+        (GET  "/top-python-contributors-developers"
                                                   request (c.pr/get-py-contribs specs request))
 
         (GET  "/top-projects/"                    request (c.pr/list-top-proj specs request))
         (GET  "/top-projects"                     request (c.pr/list-top-proj specs request))
         (GET  "/top-:platform-projects/"          request (c.pr/list-top-proj specs request))
-        
+
         (GET  "/os/"                              request (c.pr/list-top-proj specs request))
         (GET  "/os"                               request (c.pr/list-top-proj specs request))
 
         (GET  "/:platform/index"                  request (c.m/platform specs request))
         (GET  "/:platform/top-projects"           request (c.pr/list-top-proj specs request))
-        (GET  "/:platform/discussions"            request (c.d/discussions specs request))
 
-        (GET  "/collections"                      request (c.coll/load-coll specs request))
-        (POST "/collections/create"               request (c.coll/create-coll specs request))
-        (GET  "/collections/:id"                  request (c.coll/get-coll specs request))
-        (GET  "/collections/:id/embed"            request (c.coll/get-coll-embed specs request))
-        (GET  "/collections/:id/rm"               request (c.coll/rm-coll specs request))
-        (GET  "/collections/:id/stargazers"       request (c.coll/coll-stargazers specs request))
-        (GET  "/collections/:id/forks"            request (c.coll/coll-forks specs request))
-        (POST "/collections/:id/star"             request (c.coll/star-coll specs request))
-        (POST "/collections/:id/fork"             request (c.coll/fork-coll specs request))
-        (POST "/collections/:id/add"              request (c.coll/add-p-coll specs request))
-        (POST "/collections/:id/delete"           request (c.coll/del-p-coll specs request))
-
-        (GET  "/tutorial/:user/:slug"             request (c.m/tutorial specs request))
-        (GET  "/tutorial/"                        request (c.m/all-tutorial specs request))
-        (GET  "/tutorial/:user/"                  request (c.m/all-tutorial specs request))
+        ; (GET  "/tutorial/:user/:slug"             request (c.m/tutorial specs request))
+        ; (GET  "/tutorial/"                        request (c.m/all-tutorial specs request))
+        ; (GET  "/tutorial/:user/"                  request (c.m/all-tutorial specs request))
 
         (GET  "/import/:language"                 [language] (json-resp (ghub/import-repos [db event-chan] language)))
-        (GET  "/search"                           request (c.pr/search specs request))
-        ; (GET  "/search/update"                    request (c.pr/update-search specs request))
-        ; (GET  "/search/update-user"               request (c.pr/update-user-search-index specs request))
+
+        (GET "/update-project/:user/:project"     [user project] (json-resp (ghub/update-project-info (format "%s/%s" user project))))
+        (GET "/get-url/:url"                      request (json-resp (c.t/get-url request)))
+        (POST "/auth"                             request (account/authorize specs request))
+        (GET "/register"                          request (account/register specs request))
 
         (route/not-found "Page not found")
         ))
@@ -149,27 +105,28 @@
         (api routes)))
 
     (def dsn (:sentry-dsn (:conf conf)))
-    
+
     (def app
       (-> http-handler
-          (wrap-exception-handler dsn)
-          (wrap-sentry dsn)
+          (wrap-defaults api-defaults)
+          (wrap-defaults (-> site-defaults
+                          (assoc-in [:security :anti-forgery] false)
+                          (assoc-in [:session :store] (carmine-store (:conn redis)))
+                          ))
+          (wrap-sentry dsn {:namespaces ["hsm"]})
+          ; (wrap-exception-handler dsn)
           (wrap-nocache)
           (wrap-log)
-          ; (if is-dev? wrap-nocache identity )
           ))
 
-    ; (if is-dev? (start-figwheel))
-    (let [server (run-jetty app {:port (Integer. port)
+    (let [server (run-server app {:port (Integer. port)
                             :join? (not is-dev?)})]
-      
-      ; (capture (:sentry-dsn conf) "Starting up..")
 
       (assoc this :server server)))
 
   (stop [this]
     (log/warn "Stopping HTTP Server")
-    (.stop server)))
+    (server)))
 
 (defn http-server
   [port]
@@ -180,10 +137,11 @@
   (let [{:keys [host port keyspace server-port zookeeper redis-host
                 redis-port else-host else-port else-index]} config-options]
     (-> (component/system-map
-          :db (sys.cassandra/cassandra-db host port keyspace)
+          :db 1 ;(sys.cassandra/cassandra-db host port keyspace)
           :redis (sys.redis/redis-db redis-host redis-port)
           :kafka-producer "a" ;(sys.kafka/kafka-producer zookeeper)
-          :else (sys.else/elastisch else-host else-port else-index)
+           :else 1 ;(sys.else/elastisch else-host else-port else-index)
+          ; :pg-db (sys.pg/new-database {})
           :conf config-options
           :app (component/using
             (http-server server-port)
@@ -204,7 +162,7 @@
 (defn worker-system [config-options]
   (let [{:keys [zookeeper]} config-options]
     (-> (component/system-map
-      :kafka-producer (sys.kafka/kafka-producer zookeeper)
+      :kafka-producer {}
       :app (component/using
         (worker)
         [:kafka-producer])))))
@@ -221,7 +179,7 @@
   [config-options]
   (let [{:keys [host port keyspace]} config-options]
     (-> (component/system-map
-          :db (sys.cassandra/cassandra-db host port keyspace)
+          :db 1 ;(sys.cassandra/cassandra-db host port keyspace)
           :app (component/using
             (map->Integration {})
             [:db]

@@ -1,20 +1,45 @@
 (ns hsm.utils
-  "Utility functions. 
-  TODO: 
+  "Utility functions.
+  TODO:
   - Separate HTTP related helpers into separate namespace
   - Write proper extensive tests which would make it easier to understand
   and would be pretty much self documenting."
-  (:require 
+  (:require
     [clojure.java.io :as io]
     [clojure.string :as str]
-    [clojure.tools.logging :as log]
+    [taoensso.timbre :as log]
     [cheshire.core :refer :all]
     [ring.util.response :as resp]
     [clj-time.core :as t]
     [clj-time.format :as f]
     [clj-time.local :as l]
-    [clj-time.coerce :as c])
-  (:import [com.google.common.net InternetDomainName]))
+    [clj-time.coerce :as c]
+    [clj-kryo.core :as kryo])
+  (:import [com.google.common.net InternetDomainName]
+            [java.io ByteArrayOutputStream ByteArrayInputStream]
+            [org.postgresql.util PGobject]
+            [com.esotericsoftware.kryo.io Output Input]))
+
+
+(defn pg-json [value]
+  (doto (PGobject.)
+    (.setType "json")
+    (.setValue value)))
+
+(defn kryo-round-trip [expr]
+  (let [bos (ByteArrayOutputStream.)]
+    (with-open [out ^Output (kryo/make-output bos)]
+      (kryo/write-object out expr))
+    (let [bis (ByteArrayInputStream. (.toByteArray bos))]
+      (with-open [in ^Input (kryo/make-input bis)]
+        (kryo/read-object in)))))
+
+(defn kryo-out [expr]
+  (let [bos (ByteArrayOutputStream.)]
+    (with-open [out ^Output (kryo/make-output bos)]
+      (kryo/write-object out expr)
+      out)))
+
 
 ; implement a multi-method for different types
 (declare in?)
@@ -54,16 +79,16 @@
     false))
 
 (defn select-values
-  "clojure.core contains select-keys 
+  "clojure.core contains select-keys
   but not select-values."
   [m ks]
-  (reduce 
-    #(if-let [v (m %2)] 
-        (conj %1 v) %1) 
+  (reduce
+    #(if-let [v (m %2)]
+        (conj %1 v) %1)
     [] ks))
 
 (defn epoch
-  "Returns the millisecond representation 
+  "Returns the millisecond representation
   the given datetime as epoch"
   ([d]
    (c/to-long d))
@@ -78,8 +103,8 @@
   (epoch (t/now)))
 
 (defn body-as-string
-  "In a given request context (or hash-map contains the body key), 
-  returns the body if string, else tries to read input 
+  "In a given request context (or hash-map contains the body key),
+  returns the body if string, else tries to read input
   string using Java.io and slurp"
   [ctx]
   (if-let [body (:body ctx)]
@@ -100,7 +125,7 @@
 
 (defn id-generate
   "Generate a new ID. Very raw right now.
-  TODO: Replace with a proper ID generator. 
+  TODO: Replace with a proper ID generator.
   Like Twitter Snowflake or simirlar"
   [& args]
   (let [time (-> (- (hsm.utils/now->ep) start) (bit-shift-left 23))
@@ -131,16 +156,16 @@
 
 (defn fqdn
   "Fully Qualified Domain Name; Parts of domain as vec
-  (fqdn \"www.pythonhackers.com\") => 
+  (fqdn \"www.pythonhackers.com\") =>
     [\"www\" \"pythonhackers\" \"com\"]
   Adds www. if necessary
-  TODO: Normally www.domain.com is not equal to 
-  domain.com but in our scenario, its same. Find a 
+  TODO: Normally www.domain.com is not equal to
+  domain.com but in our scenario, its same. Find a
   better name!"
   [request]
   (let [parts (domain-of request)]
     (if (= (count parts) 3)
-      (connect-parts parts)    
+      (connect-parts parts)
       (connect-parts (concat ["www"] (vec parts))))))
 
 (defn id-of
@@ -155,11 +180,11 @@
 (defn body-of
   "Reads the JSON body of the request"
   [request]
-  (parse-string 
+  (parse-string
     (body-as-string request)))
 
 (def mime-types
-  {:json "application/json" 
+  {:json "application/json"
    :html "text/html"})
 
 (defn type-of
@@ -176,7 +201,7 @@
 (defn whois
   "Temporary user finder.. Returns a static User ID"
   [request]
-  (log/debug (get-in request [:headers "x-auth-token"]))
+  ; (log/debug (get-in request [:headers "x-auth-token"]))
   243975551163827208)
 
 (defn common-of
@@ -201,14 +226,14 @@
   (apply str (map char bytes)))
 
 (defn cutoff
-  [s maxlen] 
-  (if (> (count s) maxlen) 
+  [s maxlen]
+  (if (> (count s) maxlen)
     (str (subs s 0 maxlen) "...")
     s))
 
-(defn in? 
+(defn in?
   "true if seq contains elm"
-  [seq el]  
+  [seq el]
   (some #(= el %) seq))
 
 (defn hex-to-str
@@ -225,8 +250,8 @@
 
 (defn unhexify [hex]
   (apply str
-    (map 
-      (fn [[x y]] (char (Integer/parseInt (str x y) 16))) 
+    (map
+      (fn [[x y]] (char (Integer/parseInt (str x y) 16)))
         (partition 2 hex))))
 
 (defn hexify2 [s]
@@ -247,13 +272,13 @@
         (subvec v 0 n))
       v)))
 
-;; Following functions borrowed+modified slightly from 
+;; Following functions borrowed+modified slightly from
 ;; Peter Taoussanis <https://www.taoensso.com>
 ;; https://github.com/ptaoussanis/encore
 (defn !nil? [x] (not (nil? x)))
 (defn   !blank? [x] (not (str/blank? x)))
 (defn     !neg? [x] (not (neg? x)))
-(defn  pos-int? [x] (and (integer? x) (pos? x)))
+
 (defn !neg-int? [x] (and (integer? x) (!neg? x)))
 (defn   nvec? [n x] (and (vector?  x) (= (count x) n)))
 (def vec1? (partial nvec? 1))

@@ -1,13 +1,13 @@
 (ns hsm.ring
   (:require
-    [clojure.tools.logging  :as log]
+    [taoensso.timbre  :as log]
     [ring.util.response     :as resp]
     [cognitect.transit       :as t]
     [clojure.stacktrace     :as clj-stk]
-    [raven-clj.core               :refer  [capture]]
-    [raven-clj.ring               :refer [capture-error]]
     [cheshire.core           :refer :all]
+    [truckerpath.clj-datadog.core :as dd]
     [digest]
+    [truckerpath.clj-datadog.core :as dd]
     [hsm.dev :refer [is-dev?]]
     )
   (:import
@@ -23,10 +23,15 @@
   [handler]
   (fn [request]
     (let [ req (assign-id request)]
-      ; (log/info "[LOG]")
-      (log/info req)
+      (log/sometimes 0.1 (log/info req))
+
       (let [response (handler req)]
         (log/info "HTTP" (:status response) (:req-id req) (:uri req))
+        (try
+          (dd/increment {} "page.views" 1 { :url (:uri req)  :status (:status response) })
+          (catch Throwable e
+            (log/error e)))
+
       response
     ))))
 
@@ -42,13 +47,9 @@
          (resp/status 400)))
       (catch Throwable e
         (do
-          (log/error e)
-          
-          (when dsn
-            (let [ft (capture-error dsn req {:message (str e "->" (.getMessage e))} e nil)]))
-                ; (log/info "SENTRY: " (deref ft 1000 :timed-out) e)
-          (log/error "[EXCP]" (str (class e)) (clj-stk/print-cause-trace e))
-          (when is-dev? (throw e))
+          (when is-dev?
+            (log/error e)
+            (throw e))
         (->
          (resp/response "Sorry. An error occured.")
          (resp/status 500)))))))
@@ -61,16 +62,16 @@
         (-> response
         (assoc-in [:headers  "Pragma"] "no-cache")
         (assoc-in [:headers  "X-Req-ID"] (:req-id request))
-        (assoc-in [:headers "X-Server-Name"] (.getHostName (InetAddress/getLocalHost)))
+        ; (assoc-in [:headers "X-Server-Name"] (.getHostName (InetAddress/getLocalHost)))
         ))))
 
 (defn json-resp
-  "Generates JSON resp of given object, 
+  "Generates JSON resp of given object,
   constructs a RING 200 Response.
   TODO: Optionable status code.."
   [data & [status]]
   (let [http-status-code (or status 200)]
-    (log/info http-status-code)
+    ; (log/info http-status-code)
     (-> (generate-string data)
           (resp/response)
           (resp/header "Content-Type" "application/json")
